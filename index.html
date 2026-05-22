@@ -323,7 +323,7 @@ function renderCounts(){
     if (st === 'ESTOQUE') cnt.estoque++;
     if (st === 'BAIXA') cnt.baixados++;
     if ((a.marca||'').toUpperCase()==='APPLE') cnt.apple++;
-    cnt.etiquetas += 1 + (a.acessorios?.length||0);
+    cnt.etiquetas += 1;
   });
   // QA: people responsible with QA-related items (we count distinct responsaveis that have at least one item)
   const respQA = new Set();
