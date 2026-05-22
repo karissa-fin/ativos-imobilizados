@@ -301,8 +301,15 @@ async function uploadFile(file, prefix='img'){
   const path = `${prefix}/${Date.now()}-${Math.random().toString(36).slice(2,8)}${ext}`;
   const { error } = await sb.storage.from('ativos').upload(path, file, {cacheControl:'3600', upsert:false});
   if (error) throw error;
-  const { data } = sb.storage.from('ativos').getPublicUrl(path);
-  return { url: data.publicUrl, path, name: file.name, size: file.size, type: file.type };
+  return { path, name: file.name, size: file.size, type: file.type };
+}
+async function signedUrl(path, expiresIn=3600){
+  if (!path) return '';
+  try {
+    const { data, error } = await sb.storage.from('ativos').createSignedUrl(path, expiresIn);
+    if (error) throw error;
+    return data.signedUrl;
+  } catch(e) { return ''; }
 }
 
 // ============= Boot =============
@@ -880,14 +887,18 @@ function renderModalBody(){
   body.querySelector('#hAdd').addEventListener('click', addHistory);
 }
 
-function renderGallery(){
+async function renderGallery(){
   const g = document.getElementById('gImg');
   g.replaceChildren();
-  (editing.imagens||[]).forEach((img, i) => {
-    const div = el(`<div class="ph"><img src="${img.url||img}" alt=""><button class="rm" data-i="${i}">&times;</button></div>`);
+  const imgs = (editing.imagens||[]);
+  for (let i=0; i<imgs.length; i++){
+    const img = imgs[i];
+    const path = (img && (img.path)) || (typeof img === 'string' ? '' : '');
+    const url = path ? await signedUrl(path) : (img.url||img||'');
+    const div = el(`<div class="ph"><img src="${url}" alt=""><button class="rm" data-i="${i}">&times;</button></div>`);
     div.querySelector('.rm').addEventListener('click', () => { editing.imagens.splice(i,1); renderGallery(); });
     g.appendChild(div);
-  });
+  }
   const add = el(`<label class="ph add">+<input type="file" accept="image/*" multiple></label>`);
   add.querySelector('input').addEventListener('change', async (e) => {
     for (const f of e.target.files) {
@@ -902,11 +913,12 @@ function renderGallery(){
   g.appendChild(add);
 }
 
-function renderNFArea(){
+async function renderNFArea(){
   const a = document.getElementById('nfArea');
   a.replaceChildren();
-  if (editing.nf_anexo && editing.nf_anexo.url) {
-    const pill = el(`<a class="nf-pill" href="${editing.nf_anexo.url}" target="_blank">📄 ${escapeHtml(editing.nf_anexo.name||'Anexo')}</a>`);
+  if (editing.nf_anexo && (editing.nf_anexo.path || editing.nf_anexo.url)) {
+    const href = editing.nf_anexo.path ? await signedUrl(editing.nf_anexo.path) : editing.nf_anexo.url;
+    const pill = el(`<a class="nf-pill" href="${href}" target="_blank">📄 ${escapeHtml(editing.nf_anexo.name||'Anexo')}</a>`);
     a.appendChild(pill);
     const rm = el('<button class="btn btn-danger" style="margin-left:8px;font-size:12px;padding:4px 8px" type="button">Remover</button>');
     rm.addEventListener('click', () => { editing.nf_anexo = null; renderNFArea(); });
