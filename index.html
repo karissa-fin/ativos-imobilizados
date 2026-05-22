@@ -262,7 +262,7 @@ function estadoTag(e){
   return '<span class="tag tag-gray">'+e+'</span>';
 }
 function debounce(fn, ms){ let h; return (...a)=>{ clearTimeout(h); h=setTimeout(()=>fn(...a), ms); } }
-function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild; }
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ============= Data layer (Supabase) =============
