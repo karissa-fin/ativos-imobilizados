@@ -207,6 +207,17 @@
   .nf-btn-del { padding: 5px 10px; border-radius: 5px; border: 1px solid var(--border2); background: #fff; color: var(--muted); font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
   .nf-btn-del:hover { border-color: var(--red); color: var(--red); }
 
+  .foto-gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .foto-thumb { position: relative; width: 110px; height: 110px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); background: var(--surface2); }
+  .foto-thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; display: block; }
+  .foto-thumb-del { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .foto-thumb-del:hover { background: var(--red); }
+  .foto-drop { border: 2px dashed var(--border2); border-radius: var(--radius); padding: 14px 18px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface2); }
+  .foto-drop:hover, .foto-drop.drag-over { border-color: var(--accent); background: rgba(45,209,172,0.04); }
+  .foto-drop input[type=file] { display: none; }
+  .foto-drop-text { font-size: 13px; color: var(--muted); }
+  .foto-drop-text span { color: var(--accent-dark); font-weight: 500; }
+
 </style>
 </head>
 <body>
@@ -230,7 +241,6 @@
     <div class="nav-item" onclick="showView('etiquetas',this)"><span class="icon">🏷</span> Etiquetas</div>
     <div class="nav-section" style="margin-top:12px">Gestão</div>
     <div class="nav-item" onclick="showView('depreciacao',this)"><span class="icon">↘</span> Depreciação</div>
-    <div class="nav-item" onclick="showView('alertas',this)"><span class="icon">⚠</span> Alertas</div>
   </aside>
 
   <main>
@@ -239,9 +249,6 @@
       <div class="view-subtitle">Visão geral do patrimônio</div>
       <div class="kpi-grid">
         <div class="kpi-card"><div class="kpi-label">Total de Itens</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-sub">ativos cadastrados</div></div>
-        <div class="kpi-card"><div class="kpi-label">Valor Original</div><div class="kpi-value" id="kpi-valor">—</div><div class="kpi-sub">soma de compra</div></div>
-        <div class="kpi-card blue"><div class="kpi-label">Valor Atual</div><div class="kpi-value" id="kpi-atual">—</div><div class="kpi-sub">após depreciação</div></div>
-        <div class="kpi-card red"><div class="kpi-label">Vencidos</div><div class="kpi-value" id="kpi-vencidos">—</div><div class="kpi-sub">vida útil expirada</div></div>
       </div>
       <div class="charts-row">
         <div class="chart-card"><div class="chart-title">Por Departamento</div><div class="bar-chart" id="chart-dept"></div></div>
@@ -293,12 +300,7 @@
       <div class="table-wrap"><table><thead><tr><th>Etiqueta</th><th>Item</th><th>Responsável</th><th>Valor Compra</th><th>Valor Atual</th><th>Depreciação</th><th>Vencimento</th></tr></thead><tbody id="depr-body"></tbody></table></div>
     </div>
 
-    <div id="view-alertas" class="view">
-      <div class="view-title">Alertas</div>
-      <div class="view-subtitle">Itens que precisam de atenção</div>
-      <div id="alertas-content"></div>
-    </div>
-  </main>
+      </main>
 </div>
 
 <!-- MODAL DETALHE -->
@@ -384,7 +386,6 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTableView('estoque', getByStatus('ESTOQUE'));
   renderTableView('baixa', getByStatus('BAIXA'));
   renderDepreciacao();
-  renderAlertas();
   renderEtiquetas();
 });
 
@@ -406,13 +407,7 @@ function showView(id, el) {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function renderDashboard() {
-  const valorTotal = ativos.reduce((s,a) => s+(parseFloat(a.valor)||0), 0);
-  const valorAtual = ativos.reduce((s,a) => s+(parseFloat(a.valorAtual)||0), 0);
-  const vencidos   = ativos.filter(a => a.vencimento && isVencido(a.vencimento)).length;
   document.getElementById('kpi-total').textContent = ativos.length;
-  document.getElementById('kpi-valor').textContent = 'R$ ' + fmtNum(valorTotal);
-  document.getElementById('kpi-atual').textContent = 'R$ ' + fmtNum(valorAtual);
-  document.getElementById('kpi-vencidos').textContent = vencidos;
   renderBarChart('chart-dept',   countBy('departamento'), 8);
   renderBarChart('chart-marca',  countBy('marca'), 8, 'blue');
   renderBarChart('chart-status', countBy('status'), 6, 'orange');
@@ -457,7 +452,7 @@ function renderTableView(viewId, data, search='', dept='') {
   </div>`;
 
   wrapEl.innerHTML = `<div class="table-wrap"><table>
-    <thead><tr><th>Etiqueta</th><th>Marca</th><th>Item / Acessórios</th><th>Modelo</th><th>Responsável</th><th>Status</th><th>Depto</th><th>Estado</th><th>Valor</th><th>Vencimento</th></tr></thead>
+    <thead><tr><th>Etiqueta</th><th>Marca</th><th>Item / Acessórios</th><th>Modelo</th><th>Responsável</th><th>Status</th><th>Depto</th><th>Estado</th></tr></thead>
     <tbody>${sliced.map(a => {
       const idx = ativos.indexOf(a);
       const accs = (a.acessorios||[]);
@@ -470,8 +465,6 @@ function renderTableView(viewId, data, search='', dept='') {
         <td>${statusTag(a.status)}</td>
         <td style="font-size:12px;color:var(--muted)">${a.departamento||'—'}</td>
         <td>${estadoTag(a.estado)}</td>
-        <td style="font-family:DM Mono,monospace;font-size:12px">${a.valor?'R$ '+fmtNum(a.valor):'—'}</td>
-        <td style="font-size:12px;color:${isVencido(a.vencimento)?'var(--red)':'var(--muted)'}">${fmtDate(a.vencimento)}</td>
       </tr>`;
     }).join('')}</tbody>
   </table>${renderPagination(viewId,page,pages)}</div>`;
@@ -569,31 +562,6 @@ function renderDepreciacao() {
   }).join('');
 }
 
-// ─── ALERTAS ──────────────────────────────────────────────────────────────────
-function renderAlertas() {
-  const today=new Date(), in90=new Date(today); in90.setDate(in90.getDate()+90);
-  const vencidos=ativos.filter(a=>a.vencimento&&isVencido(a.vencimento));
-  const aVencer=ativos.filter(a=>a.vencimento&&!isVencido(a.vencimento)&&new Date(a.vencimento)<=in90);
-  const semResp=ativos.filter(a=>!a.responsavel||a.responsavel.includes('ZZ'));
-  const estragados=ativos.filter(a=>(a.estado||'').toLowerCase().includes('estrag'));
-  const section=(title,items,cls,icon,detail)=>`
-    <div style="margin-bottom:24px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-family:DM Mono,monospace;margin-bottom:10px">${title} (${items.length})</div>
-      <div class="alert-list">${items.slice(0,20).map(a=>`
-        <div class="alert-item ${cls}" onclick="openModal(${ativos.indexOf(a)})">
-          <span class="alert-icon">${icon}</span>
-          <div class="alert-text"><strong>${a.item||'—'} ${a.marca||''} — #${a.etiqueta||'?'}</strong><span>${detail(a)}</span></div>
-        </div>`).join('')}
-        ${items.length>20?`<div style="font-size:12px;color:var(--muted);padding:8px 0">...e mais ${items.length-20} itens</div>`:''}
-      </div>
-    </div>`;
-  document.getElementById('alertas-content').innerHTML=
-    section('Vida Útil Vencida',vencidos,'danger','⚠',a=>`Vencido em ${fmtDate(a.vencimento)} — ${a.responsavel||'sem responsável'}`)+
-    section('Vence em 90 dias',aVencer,'warn','🕐',a=>`Vence em ${fmtDate(a.vencimento)} — ${a.responsavel||'sem responsável'}`)+
-    section('Sem Responsável / Perda',semResp,'warn','👤',a=>`${a.item||'—'} — ${a.departamento||'sem depto'}`)+
-    section('Estado Estragado',estragados,'danger','🔧',a=>`${a.responsavel||'sem responsável'} — ${a.departamento||'—'}`);
-}
-
 // ─── MODAL ────────────────────────────────────────────────────────────────────
 function openModal(idx) {
   const a = ativos[idx];
@@ -621,6 +589,10 @@ function openModal(idx) {
       <div class="modal-field nf-field">
         <div class="field-label">Nota Fiscal (arquivo)</div>
         ${renderNFField(idx, a.nfAnexo)}
+      </div>
+      <div class="modal-field fotos-field" style="grid-column:1/-1">
+        <div class="field-label">Fotos do Produto</div>
+        ${renderFotosField(idx, a.fotos||[])}
       </div>
       ${mf('Valor Atual','valorAtual',a.valorAtual?'R$ '+fmtNum(a.valorAtual):'—')}
       ${mf('Idade','idade',a.idade)}
@@ -683,11 +655,11 @@ function mfArea(label,field,val,full=false){
 
 function saveAtivo(idx){
   document.getElementById('modal-body').querySelectorAll('[data-field]').forEach(inp=>{ativos[idx][inp.dataset.field]=inp.value;});
-  save(); updateCounts(); renderDashboard(); refreshAllTables(); renderDepreciacao(); renderAlertas(); closeModal(); showToast('Ativo salvo!');
+  save(); updateCounts(); renderDashboard(); refreshAllTables(); renderDepreciacao(); closeModal(); showToast('Ativo salvo!');
 }
 function deleteAtivo(idx){
   if(!confirm('Excluir este ativo?'))return;
-  ativos.splice(idx,1); save(); updateCounts(); renderDashboard(); refreshAllTables(); renderDepreciacao(); renderAlertas(); closeModal(); showToast('Ativo excluído.',true);
+  ativos.splice(idx,1); save(); updateCounts(); renderDashboard(); refreshAllTables(); renderDepreciacao(); closeModal(); showToast('Ativo excluído.',true);
 }
 function closeModal(){ document.getElementById('modal-overlay').classList.remove('open'); }
 
@@ -773,13 +745,14 @@ function saveNewAtivo(){
     estado:document.getElementById('f-estado').value,
     dataCompra, vidaUtil,
     valor:parseFloat(document.getElementById('f-valor').value)||0,
+    fotos:[],
     nf:document.getElementById('f-nf').value,
     fornecedor:document.getElementById('f-fornecedor').value,
     observacoes:document.getElementById('f-observacoes').value,
     vencimento:calcVenc(dataCompra,vidaUtil),
     acessorios:[], historico:[]
   };
-  ativos.unshift(novo); save(); updateCounts(); renderDashboard(); refreshAllTables(); renderDepreciacao(); renderAlertas(); closeAddModal();
+  ativos.unshift(novo); save(); updateCounts(); renderDashboard(); refreshAllTables(); renderDepreciacao(); closeAddModal();
   ['f-etiqueta','f-marca','f-item','f-modelo','f-serie','f-responsavel','f-nf','f-fornecedor','f-observacoes'].forEach(id=>document.getElementById(id).value='');
   showToast('Ativo adicionado!');
 }
@@ -853,6 +826,70 @@ function removeNF(idx){
   if(wrap){const lbl=wrap.querySelector('.field-label').outerHTML;wrap.innerHTML=lbl+renderNFField(idx,null);}
   showToast('Nota fiscal removida.');
 }
+
+// ─── FOTOS DO PRODUTO ─────────────────────────────────────────────────────────
+function renderFotosField(idx, fotos){
+  fotos = fotos || [];
+  const thumbs = fotos.map((f,i) => `<div class="foto-thumb">
+    <img src="${f.data}" alt="foto ${i+1}" onclick="viewFoto(${idx},${i})"/>
+    <button class="foto-thumb-del" onclick="removeFoto(${idx},${i})" title="Remover">✕</button>
+  </div>`).join('');
+  const drop = `<div class="foto-drop" id="foto-drop-${idx}"
+    ondragover="event.preventDefault();this.classList.add('drag-over')"
+    ondragleave="this.classList.remove('drag-over')"
+    ondrop="handleFotoDrop(event,${idx})"
+    onclick="document.getElementById('foto-input-${idx}').click()">
+    <input type="file" id="foto-input-${idx}" accept="image/*" multiple onchange="handleFotoFile(event,${idx})"/>
+    <div class="foto-drop-text">📷 <span>Adicionar fotos</span> &middot; clique ou arraste imagens aqui</div>
+  </div>`;
+  return `<div class="foto-gallery">${thumbs}</div>${drop}`;
+}
+function handleFotoDrop(e,idx){
+  e.preventDefault();
+  document.getElementById('foto-drop-'+idx)?.classList.remove('drag-over');
+  const files = Array.from(e.dataTransfer.files||[]).filter(f => f.type.startsWith('image/'));
+  files.forEach(f => processFotoFile(f, idx));
+}
+function handleFotoFile(e,idx){
+  const files = Array.from(e.target.files||[]);
+  files.forEach(f => processFotoFile(f, idx));
+  e.target.value = '';
+}
+function processFotoFile(file, idx){
+  if(!file.type.startsWith('image/')){showToast('Apenas imagens são aceitas.', true); return;}
+  if(file.size > 3*1024*1024){showToast('Máximo 3MB por foto.', true); return;}
+  const r = new FileReader();
+  r.onload = e => {
+    if(!ativos[idx].fotos) ativos[idx].fotos = [];
+    ativos[idx].fotos.push({name:file.name, size:file.size, type:file.type, data:e.target.result});
+    save();
+    refreshFotosField(idx);
+    showToast('Foto adicionada!');
+  };
+  r.readAsDataURL(file);
+}
+function refreshFotosField(idx){
+  const wrap = document.querySelector('.fotos-field');
+  if(!wrap) return;
+  const lbl = wrap.querySelector('.field-label').outerHTML;
+  wrap.innerHTML = lbl + renderFotosField(idx, ativos[idx].fotos||[]);
+}
+function viewFoto(idx, fotoIdx){
+  const fotos = ativos[idx].fotos || [];
+  const f = fotos[fotoIdx];
+  if(!f) return;
+  const w = window.open();
+  w.document.write('<title>'+f.name+'</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+f.data+'" style="max-width:100vw;max-height:100vh;object-fit:contain"/></body>');
+}
+function removeFoto(idx, fotoIdx){
+  event.stopPropagation();
+  if(!confirm('Remover esta foto?')) return;
+  ativos[idx].fotos.splice(fotoIdx, 1);
+  save();
+  refreshFotosField(idx);
+  showToast('Foto removida.');
+}
+
 function fmtBytes(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB';}
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
