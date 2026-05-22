@@ -105,6 +105,9 @@ table.list tr.clickable:hover td{background:#fafafb}
 .gallery .ph{width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative;background:#f3f3f4}
 .gallery .ph img{width:100%;height:100%;object-fit:cover}
 .gallery .ph .rm{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:0;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center}
+.gallery .ph.locked{cursor:pointer;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eef2f7,#dde3ec)}
+.gallery .ph.locked .ph-lock{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:#535D6E;font-family:'DM Mono',monospace;text-align:center;line-height:1.1;padding:4px}
+.gallery .ph.locked:hover{border-color:var(--accent);background:linear-gradient(135deg,#e6f7f1,#cdebe0)}
 .gallery .add{display:flex;align-items:center;justify-content:center;border:1px dashed var(--border2);color:var(--muted);font-size:24px}
 .gallery .add input{display:none}
 .nf-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:20px;background:#fff;font-size:12px;color:var(--accent-dark);text-decoration:none}
@@ -163,7 +166,7 @@ table.list tr.clickable:hover td{background:#fafafb}
         <div class="nav-item" data-view="baixados"><span class="nav-l"><span class="ico">&times;</span>Baixados</span><span class="badge" id="cnt-baixados">0</span></div>
         <div class="nav-item" data-view="etiquetas"><span class="nav-l"><span class="ico">&#9873;</span>Etiquetas</span><span class="badge" id="cnt-etiquetas">0</span></div>
         <div class="nav-item" data-view="apple"><span class="nav-l"><span class="ico">&#63743;</span>Apple</span><span class="badge" id="cnt-apple">0</span></div>
-        <div class="nav-item" data-view="qa"><span class="nav-l"><span class="ico">&#9784;</span>QA</span><span class="badge" id="cnt-qa">0</span></div>
+        <div class="nav-item" data-view="qa"><span class="nav-l"><span class="ico">&#9784;</span>Kyter</span><span class="badge" id="cnt-qa">0</span></div>
       </nav>
       <h6>Gestão</h6>
       <nav>
@@ -387,7 +390,7 @@ function renderDashboard(){
     <p class="page-sub">Visão geral do patrimônio</p>
     <div class="cards-row">
       <div class="card metric"><div class="label">Total de itens</div><div class="value">${total}</div><div class="sub">ativos cadastrados</div></div>
-      <div class="card metric"><div class="label">Valor atual estimado</div><div class="value">R$ ${fmtBR(valSum)}</div><div class="sub">soma de valor_atual</div></div>
+      
     </div>
     <div class="cards-row">
       <div class="card"><h5 class="section-title">Por departamento</h5><div id="ddept"></div></div>
@@ -684,7 +687,7 @@ function renderQA(){
   const people = [...byPerson.entries()].sort((x,y)=>x[0].localeCompare(y[0],'pt'));
 
   const root = el(`<div>
-    <h2 class="page-title">QA</h2>
+    <h2 class="page-title">Kyter</h2>
     <p class="page-sub">Visão por responsável — itens principais e acessórios</p>
     <div class="filters">
       <div class="field grow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="fSearch" placeholder="Buscar pessoa, equipamento..."></div>
@@ -893,12 +896,35 @@ function renderModalBody(){
   body.querySelector('#hAdd').addEventListener('click', addHistory);
 }
 
+// Senha de acesso às fotos dos ativos (alterável)
+const FOTOS_PASSWORD = 'kyter2026';
+// Sessão temporária: uma vez liberada, mantém acesso durante a sessão atual
+let __fotosUnlocked = false;
+function ensureFotosAccess(){
+  if (__fotosUnlocked) return true;
+  const p = prompt('Digite a senha para acessar as fotos do ativo:');
+  if (p === null) return false;
+  if (p === FOTOS_PASSWORD) { __fotosUnlocked = true; return true; }
+  toast('Senha incorreta');
+  return false;
+}
+
 function renderGallery(){
   const g = document.getElementById('gImg');
   g.replaceChildren();
   (editing.imagens||[]).forEach((img, i) => {
-    const div = el(`<div class="ph"><img src="${img.url||img}" alt=""><button class="rm" data-i="${i}">&times;</button></div>`);
-    div.querySelector('.rm').addEventListener('click', () => { editing.imagens.splice(i,1); renderGallery(); });
+    const url = img.url||img;
+    const div = el(`<div class="ph locked" title="Clique para visualizar (requer senha)"><div class="ph-lock">🔒<span>Foto protegida</span></div><button class="rm" data-i="${i}">&times;</button></div>`);
+    div.querySelector('.rm').addEventListener('click', (ev) => { ev.stopPropagation(); editing.imagens.splice(i,1); renderGallery(); });
+    div.addEventListener('click', () => {
+      if (!ensureFotosAccess()) return;
+      div.classList.remove('locked');
+      div.querySelector('.ph-lock')?.remove();
+      const im = el(`<img src="${url}" alt="">`);
+      im.style.cursor = 'zoom-in';
+      im.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+      div.insertBefore(im, div.firstChild);
+    });
     g.appendChild(div);
   });
   const add = el(`<label class="ph add">+<input type="file" accept="image/*" multiple></label>`);
