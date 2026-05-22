@@ -428,28 +428,65 @@ function renderBarChart(id, data, limit, colorClass='') {
 }
 
 // ─── TABLE ────────────────────────────────────────────────────────────────────
-function renderTableView(viewId, data, search='', dept='') {
-  window['_tbl_'+viewId] = { data, search, dept };
+function renderTableView(viewId, data, search='', dept='', tipo='', resp='') {
+  window['_tbl_'+viewId] = { data, search, dept, tipo, resp };
   const ctrlEl = document.getElementById(viewId+'-controls');
   const wrapEl = document.getElementById(viewId+'-table-wrap');
   if (!ctrlEl || !wrapEl) return;
 
+  // Render controls only once per view (not on every keystroke) so the input keeps focus
+  if (!ctrlEl.dataset.built) {
+    const depts = [...new Set(data.map(a=>a.departamento).filter(Boolean))].sort();
+    const tipos = [...new Set(data.map(a=>a.item).filter(Boolean))].sort();
+    const resps = [...new Set(data.map(a=>a.responsavel).filter(Boolean))].sort();
+    ctrlEl.innerHTML = `<div class="table-controls">
+      <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" placeholder="Buscar..." id="srch-${viewId}" value="${search}"/></div>
+      <select class="filter-select" id="sel-${viewId}">
+        <option value="">Todos os departamentos</option>${depts.map(d=>`<option ${d===dept?'selected':''}>${d}</option>`).join('')}
+      </select>
+      <select class="filter-select" id="seltipo-${viewId}">
+        <option value="">Todos os itens</option>${tipos.map(t=>`<option ${t===tipo?'selected':''}>${t}</option>`).join('')}
+      </select>
+      <select class="filter-select" id="selresp-${viewId}">
+        <option value="">Todos os responsáveis</option>${resps.map(r=>`<option ${r===resp?'selected':''}>${r}</option>`).join('')}
+      </select>
+      <span class="results-count" id="cnt-${viewId}">— itens</span>
+    </div>`;
+    ctrlEl.dataset.built = '1';
+    // Debounced search on the text input
+    const inp = document.getElementById('srch-'+viewId);
+    let t;
+    inp.addEventListener('input', e => {
+      clearTimeout(t);
+      const v = e.target.value;
+      t = setTimeout(() => handleSearch(viewId, v,
+        document.getElementById('sel-'+viewId).value,
+        document.getElementById('seltipo-'+viewId).value,
+        document.getElementById('selresp-'+viewId).value), 200);
+    });
+    // Selects update immediately
+    ['sel-','seltipo-','selresp-'].forEach(p => {
+      document.getElementById(p+viewId).addEventListener('change', () => handleSearch(viewId,
+        document.getElementById('srch-'+viewId).value,
+        document.getElementById('sel-'+viewId).value,
+        document.getElementById('seltipo-'+viewId).value,
+        document.getElementById('selresp-'+viewId).value));
+    });
+  }
+
+  // Apply filters
   let filtered = data;
   if (search) { const q=search.toLowerCase(); filtered=filtered.filter(a=>[a.etiqueta,a.marca,a.item,a.modelo,a.responsavel,a.serie,a.departamento].some(v=>v&&String(v).toLowerCase().includes(q))); }
-  if (dept) filtered = filtered.filter(a=>(a.departamento||'')===dept);
+  if (dept)  filtered = filtered.filter(a=>(a.departamento||'')===dept);
+  if (tipo)  filtered = filtered.filter(a=>(a.item||'')===tipo);
+  if (resp)  filtered = filtered.filter(a=>(a.responsavel||'')===resp);
 
   const page = currentPage[viewId] || 1;
   const pages = Math.ceil(filtered.length / PAGE_SIZE);
   const sliced = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
-  const depts = [...new Set(data.map(a=>a.departamento).filter(Boolean))].sort();
 
-  ctrlEl.innerHTML = `<div class="table-controls">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" placeholder="Buscar..." value="${search}" oninput="handleSearch('${viewId}',this.value,document.getElementById('sel-${viewId}').value)"/></div>
-    <select class="filter-select" id="sel-${viewId}" onchange="handleSearch('${viewId}',document.querySelector('#${viewId}-controls input').value,this.value)">
-      <option value="">Todos os departamentos</option>${depts.map(d=>`<option ${d===dept?'selected':''}>${d}</option>`).join('')}
-    </select>
-    <span class="results-count">${filtered.length} itens</span>
-  </div>`;
+  const cnt = document.getElementById('cnt-'+viewId);
+  if (cnt) cnt.textContent = filtered.length + ' itens';
 
   wrapEl.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Etiqueta</th><th>Marca</th><th>Item / Acessórios</th><th>Modelo</th><th>Responsável</th><th>Status</th><th>Depto</th><th>Estado</th></tr></thead>
@@ -469,13 +506,11 @@ function renderTableView(viewId, data, search='', dept='') {
     }).join('')}</tbody>
   </table>${renderPagination(viewId,page,pages)}</div>`;
 }
-
-function handleSearch(viewId, search, dept) {
+function handleSearch(viewId, search, dept, tipo, resp) {
   currentPage[viewId]=1;
-  const s=window['_tbl_'+viewId]||{};
-  renderTableView(viewId, s.data||ativos, search, dept);
+  const st=window['_tbl_'+viewId]||{};
+  renderTableView(viewId, st.data||ativos, search||'', dept||'', tipo||'', resp||'');
 }
-
 function goPage(viewId, page) {
   currentPage[viewId]=page;
   const s=window['_tbl_'+viewId]||{};
@@ -494,9 +529,12 @@ function renderPagination(viewId, page, pages) {
 
 function refreshAllTables() {
   ['ativos','em-uso','estoque','baixa'].forEach(v => {
-    const s=window['_tbl_'+v]||{};
+    const st=window['_tbl_'+v]||{};
     const data = v==='ativos'?ativos:v==='em-uso'?getByStatus('EM USO'):v==='estoque'?getByStatus('ESTOQUE'):getByStatus('BAIXA');
-    renderTableView(v, data, s.search||'', s.dept||'');
+    // Reset controls so dropdowns refresh with new data
+    const ctrl = document.getElementById(v+'-controls');
+    if (ctrl) ctrl.dataset.built = '';
+    renderTableView(v, data, st.search||'', st.dept||'', st.tipo||'', st.resp||'');
   });
 }
 
