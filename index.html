@@ -263,6 +263,8 @@ function estadoTag(e){
 }
 function debounce(fn, ms){ let h; return (...a)=>{ clearTimeout(h); h=setTimeout(()=>fn(...a), ms); } }
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+function etiqNum(e){ const m = String(e==null?'':e).match(/\d+/); return m ? Number(m[0]) : Infinity; }
+function byEtiq(a,b){ const na=etiqNum(a.etiqueta), nb=etiqNum(b.etiqueta); if (na!==nb) return na-nb; return String(a.etiqueta||'').localeCompare(String(b.etiqueta||''),'pt'); }
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ============= Data layer (Supabase) =============
@@ -472,7 +474,7 @@ function renderList(title, sub, predicate, opts={}){
       }
       return true;
     });
-    tbody.replaceChildren(...list.map(a => rowFor(a, opts)));
+    tbody.replaceChildren(...list.sort(byEtiq).map(a => rowFor(a, opts)));
     count.textContent = list.length + ' itens';
   }
   fSearch.addEventListener('input', debounce(applyFilters, 180));
@@ -552,7 +554,7 @@ function renderEtiquetas(){
       }
       return true;
     });
-    tbody.replaceChildren(...list.map(a => {
+    tbody.replaceChildren(...list.sort(byEtiq).map(a => {
       const tr = el(`<tr class="clickable">
         <td><span class="etiq">#${escapeHtml(a.etiqueta||'')}</span></td>
         <td>${a.tipo? `<span class="tag tag-gray">${escapeHtml(a.tipo)}</span>` : ''}</td>
@@ -617,7 +619,7 @@ function renderApple(){
       }
       return true;
     });
-    tbody.replaceChildren(...list.map(a => {
+    tbody.replaceChildren(...list.sort(byEtiq).map(a => {
       const s = specsFrom(a);
       const tr = el(`<tr class="clickable">
         <td><strong>${escapeHtml(a.modelo||'')}</strong><div style="color:var(--muted);font-size:11px;font-family:var(--mono)">#${escapeHtml(a.etiqueta||'')}</div></td>
@@ -633,7 +635,7 @@ function renderApple(){
       tr.addEventListener('click', ()=>openModal(a));
       return tr;
     }));
-    tbody2.replaceChildren(...baixados.map(a => {
+    tbody2.replaceChildren(...baixados.sort(byEtiq).map(a => {
       const lastH = (a.historico||[]).slice(-1)[0];
       const tr = el(`<tr class="clickable">
         <td><strong>${escapeHtml(a.modelo||'')}</strong></td>
@@ -693,8 +695,8 @@ function renderQA(){
         const hay = (name + ' ' + card.team + ' ' + card.items.map(i=>(i.item+' '+i.modelo)).join(' ') + ' ' + card.accessories.map(a=>a.item+' '+a.modelo).join(' ')).toLowerCase();
         if (!hay.includes(q)) return;
       }
-      const itemsHtml = card.items.map(i => `<li><span class="item-name">${escapeHtml(i.item||'')}</span><span class="item-val">${escapeHtml(i.modelo||'')}<br><span style="color:var(--muted);font-family:var(--mono);font-size:11px">#${escapeHtml(i.etiqueta||'')} · ${escapeHtml(i.marca||'')}</span></span></li>`).join('');
-      const accHtml = card.accessories.length ? `<li style="margin-top:8px"><span class="item-name">Acessórios</span><span class="item-val">${card.accessories.map(a=>`#${escapeHtml(a.etiqueta||'')} ${escapeHtml(a.item||'')}`).join('<br>')}</span></li>` : '';
+      const itemsHtml = card.items.slice().sort(byEtiq).map(i => `<li><span class="item-name">${escapeHtml(i.item||'')}</span><span class="item-val">${escapeHtml(i.modelo||'')}<br><span style="color:var(--muted);font-family:var(--mono);font-size:11px">#${escapeHtml(i.etiqueta||'')} · ${escapeHtml(i.marca||'')}</span></span></li>`).join('');
+      const accHtml = card.accessories.length ? `<li style="margin-top:8px"><span class="item-name">Acessórios</span><span class="item-val">${card.accessories.slice().sort(byEtiq).map(a=>`#${escapeHtml(a.etiqueta||'')} ${escapeHtml(a.item||'')}`).join('<br>')}</span></li>` : '';
       const c = el(`<div class="card qa-card"><h4>${escapeHtml(name)}</h4><span class="team">${escapeHtml(card.team||'—')}</span><ul>${itemsHtml}${accHtml}</ul></div>`);
       // click on first item opens modal
       c.addEventListener('click', () => { if (card.items[0]) openModal(card.items[0]); });
@@ -732,7 +734,7 @@ function renderDepreciacao(){
     <table class="list"><thead><tr><th>Etiqueta</th><th>Item</th><th>Modelo</th><th>Data Compra</th><th>Vida (anos)</th><th>Depreciação</th><th>Valor original</th><th>Valor atual estimado</th></tr></thead><tbody></tbody></table>
   </div>`);
   const tb = root.querySelector('tbody');
-  rows.sort((x,y)=>y.depPct - x.depPct).forEach(r => {
+  rows.sort((x,y)=>{ const na=etiqNum(x.a.etiqueta), nb=etiqNum(y.a.etiqueta); return na-nb; }).forEach(r => {
     const tr = el(`<tr class="clickable">
       <td><span class="etiq">#${escapeHtml(r.a.etiqueta||'')}</span></td>
       <td>${escapeHtml(r.a.item||'')}</td>
