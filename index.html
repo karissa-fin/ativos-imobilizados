@@ -501,29 +501,15 @@ function rowFor(a, opts={}){
 }
 
 function renderEtiquetas(){
-  // Flatten: each asset + each accessory
-  const all = [];
-  DATA.forEach(a => {
-    all.push({
-      etiqueta: a.etiqueta, tipo: a.item, marca: a.marca, modelo: a.modelo,
-      responsavel: a.responsavel, departamento: a.departamento, status: a.status,
-      pai: '', isAcc:false, _ref:a
-    });
-    (a.acessorios||[]).forEach(ac => {
-      all.push({
-        etiqueta: ac.etiqueta||'', tipo: ac.item||'ACESSÓRIO',
-        marca: ac.marca||a.marca, modelo: ac.modelo||'',
-        responsavel: ac.responsavel||a.responsavel,
-        departamento: ac.departamento||a.departamento,
-        status: ac.status||a.status,
-        pai: a.item + ' #' + (a.etiqueta||''),
-        isAcc:true, _ref:a
-      });
-    });
-  });
+  // Cada item de DATA é independente — acessórios não são "vinculados" aqui
+  const all = DATA.map(a => ({
+    etiqueta: a.etiqueta, tipo: a.item, marca: a.marca, modelo: a.modelo,
+    responsavel: a.responsavel, departamento: a.departamento, status: a.status,
+    isAcc:false, _ref:a
+  }));
   const root = el(`<div>
     <h2 class="page-title">Etiquetas</h2>
-    <p class="page-sub">Todos os itens com sua etiqueta — incluindo acessórios vinculados</p>
+    <p class="page-sub">Todos os itens com sua etiqueta — cada um é independente</p>
     <div class="filters">
       <div class="field grow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="fSearch" placeholder="Buscar etiqueta, item, responsável..."></div>
       <select class="select" id="fTipo"></select>
@@ -533,7 +519,7 @@ function renderEtiquetas(){
       <span class="count-tag" id="fCount"></span>
     </div>
     <table class="list"><thead><tr>
-      <th>Etiqueta</th><th>Tipo</th><th>Marca / Modelo</th><th>Responsável</th><th>Depto</th><th>Status</th><th>Ativo Pai</th>
+      <th>Etiqueta</th><th>Tipo</th><th>Marca / Modelo</th><th>Responsável</th><th>Depto</th><th>Status</th>
     </tr></thead><tbody id="lbody"></tbody></table>
   </div>`);
   const fSearch = root.querySelector('#fSearch');
@@ -568,13 +554,12 @@ function renderEtiquetas(){
     });
     tbody.replaceChildren(...list.map(a => {
       const tr = el(`<tr class="clickable">
-        <td><span class="etiq">${a.isAcc?'&#x21B3; ':''}#${escapeHtml(a.etiqueta||'')}</span></td>
+        <td><span class="etiq">#${escapeHtml(a.etiqueta||'')}</span></td>
         <td>${a.tipo? `<span class="tag tag-gray">${escapeHtml(a.tipo)}</span>` : ''}</td>
         <td><strong>${escapeHtml(a.marca||'')}</strong> · <span style="color:var(--muted)">${escapeHtml(a.modelo||'')}</span></td>
         <td>${escapeHtml(a.responsavel||'')}</td>
         <td>${escapeHtml(a.departamento||'')}</td>
         <td>${statusTag(a.status)}</td>
-        <td><span style="color:var(--muted);font-family:var(--mono);font-size:12px">${a.pai? escapeHtml(a.pai) : '—'}</span></td>
       </tr>`);
       tr.addEventListener('click', ()=>openModal(a._ref));
       return tr;
@@ -850,7 +835,7 @@ function renderModalBody(){
     <div class="subform"><h5>Acessórios vinculados</h5>
       <div id="accArea"></div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn" type="button" id="accFromStock">+ Vincular do estoque</button>
+        <button class="btn" type="button" id="accFromStock">+ Vincular da etiqueta</button>
         <button class="btn" type="button" id="accNew">+ Criar novo acessório</button>
       </div>
     </div>
@@ -946,20 +931,22 @@ function renderAccArea(){
 }
 
 function accLinkFromStock(){
-  // Pull free accessories from DATA whose item is non-main (CARREGADOR, WEBCAM, LEITOR...) and not currently in someone's list
+  // Pull from the Etiquetas list (all DATA items with an etiqueta), excluding the current asset and items already linked elsewhere
   const used = new Set();
   DATA.forEach(a => (a.acessorios||[]).forEach(ac => used.add(String(ac.etiqueta||''))));
+  const currentId = editing && editing.id;
   const free = DATA.filter(a => {
-    const i = (a.item||'').toUpperCase();
-    if (!['CARREGADOR','WEBCAM','LEITOR DE CÓDIGO DE BARRAS','TABLET','MAQUININHA'].some(k => i.includes(k))) return false;
-    if ((a.status||'').toUpperCase()!=='ESTOQUE') return false;
+    if (!a.etiqueta) return false;
+    if (currentId && a.id === currentId) return false;
+    if ((a.status||'').toUpperCase()==='BAIXA') return false;
     return !used.has(String(a.etiqueta));
   });
-  const sel = prompt('Vincular acessório do estoque. Digite a etiqueta:\n' + free.map(a=>'#'+a.etiqueta+' '+a.item+' '+(a.modelo||'')).join('\n'));
+  if (!free.length) { toast('Nenhuma etiqueta disponível para vincular'); return; }
+  const sel = prompt('Vincular item da aba Etiquetas. Digite a etiqueta:\n' + free.map(a=>'#'+a.etiqueta+' '+a.item+' '+(a.modelo||'')).join('\n'));
   if (!sel) return;
   const tag = sel.replace(/^#?\s*/, '').trim();
   const found = free.find(a => String(a.etiqueta) === tag);
-  if (!found) { toast('Etiqueta não encontrada no estoque'); return; }
+  if (!found) { toast('Etiqueta não encontrada'); return; }
   editing.acessorios = editing.acessorios||[];
   editing.acessorios.push({ etiqueta: found.etiqueta, item: found.item, marca: found.marca, modelo: found.modelo, serie: found.serie, estado: found.estado||'BOM', status:'EM USO', _linkedId: found.id });
   renderAccArea();
