@@ -1001,24 +1001,61 @@ function renderHistArea(){
   });
 }
 
-function addHistory(){
+async function addHistory(){
   const tipo = document.getElementById('hType').value;
   const data = document.getElementById('hDate').value;
   const de = document.getElementById('hFrom').value;
   const para = document.getElementById('hTo').value;
   const obs = document.getElementById('hObs').value;
   if (!para) { toast('Informe o destino'); return; }
+  if (!editing.id) { toast('Salve o ativo primeiro antes de registrar movimentações'); return; }
+
+  const btn = document.getElementById('hAdd');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Registrando...';
+
+  // Snapshot para rollback em caso de erro
+  const prevHistorico = (editing.historico||[]).slice();
+  const prevResponsavel = editing.responsavel;
+
   editing.historico = editing.historico||[];
   editing.historico.push({tipo, data, de, para, observacao: obs});
-  // If transferência, update responsavel
   if (tipo === 'Transferência' || tipo === 'Devolução') editing.responsavel = para;
-  renderHistArea();
-  // Clear inputs
-  document.getElementById('hTo').value='';
-  document.getElementById('hObs').value='';
-  // Refresh select option for responsavel
-  const sel = document.querySelector('select[data-field="responsavel"]');
-  if (sel) sel.value = editing.responsavel||'';
+
+  try {
+    // Persiste direto no Supabase (sem precisar clicar em "Salvar Alterações")
+    const row = {...editing};
+    delete row._isAccessory; delete row._parent; delete row._ref;
+    row.acessorios = row.acessorios||[];
+    row.historico  = row.historico||[];
+    row.imagens    = row.imagens||[];
+    await saveAsset(row);
+
+    // Atualiza a lista local em memória (DATA) para refletir sem precisar recarregar
+    const idx = DATA.findIndex(a => a.id === editing.id);
+    if (idx >= 0) {
+      DATA[idx].historico = editing.historico.slice();
+      DATA[idx].responsavel = editing.responsavel;
+    }
+
+    renderHistArea();
+    document.getElementById('hTo').value='';
+    document.getElementById('hObs').value='';
+    const sel = document.querySelector('select[data-field="responsavel"]');
+    if (sel) sel.value = editing.responsavel||'';
+    renderCounts(); render();
+    toast('Movimentação registrada!');
+  } catch (e) {
+    // Rollback em memória
+    editing.historico = prevHistorico;
+    editing.responsavel = prevResponsavel;
+    renderHistArea();
+    toast('Erro ao salvar: ' + (e.message||e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
 
 async function saveFromModal(){
