@@ -854,8 +854,18 @@ function renderModalBody(){
       <div class="grid-3" style="margin-top:10px">
         <div class="fld"><label>Tipo</label><select id="hType"><option>Transferência</option><option>Manutenção</option><option>Baixa</option><option>Devolução</option></select></div>
         <div class="fld"><label>Data</label><input type="date" id="hDate" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="fld"><label>De</label><input id="hFrom" value="${escapeHtml(editing.responsavel||'')}"></div>
-        <div class="fld"><label>Para</label><input id="hTo" placeholder="Novo responsável / local"></div>
+        <div class="fld"><label>De</label>
+          <select id="hFrom">
+            <option value="">— Selecione —</option>
+            ${uniq(DATA.map(a=>a.responsavel)).map(r => `<option value="${escapeHtml(r)}" ${r===(editing.responsavel||'') ? 'selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fld"><label>Para</label>
+          <select id="hTo">
+            <option value="">— Selecione novo responsável —</option>
+            ${uniq(DATA.map(a=>a.responsavel)).map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('')}
+          </select>
+        </div>
         <div class="fld" style="grid-column:span 2"><label>Observação</label><input id="hObs" placeholder="Motivo, detalhes..."></div>
       </div>
       <button class="btn btn-primary" type="button" id="hAdd" style="margin-top:6px">Registrar</button>
