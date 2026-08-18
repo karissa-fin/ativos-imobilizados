@@ -211,6 +211,8 @@ let DATA = [];           // all rows from ativos
 let view = 'dashboard';
 let filters = {};
 let editing = null;      // current asset being edited (clone)
+let viewFilters = {};    // per-view search/filter state, persisted across re-renders (e.g. after saving an asset)
+function vf(v){ return viewFilters[v] || (viewFilters[v] = {}); }
 
 // ============= Auth gate =============
 const lock = document.getElementById('lockScreen');
@@ -331,7 +333,7 @@ function renderCounts(){
     if (st === 'EM USO') cnt.emuso++;
     if (st === 'ESTOQUE') cnt.estoque++;
     if (st === 'BAIXA') cnt.baixados++;
-    if ((a.marca||'').toUpperCase()==='APPLE') cnt.apple++;
+    if ((a.marca||'').trim().toUpperCase()==='APPLE') cnt.apple++;
     cnt.etiquetas += 1;
   });
   // QA: people responsible with QA-related items (we count distinct responsaveis that have at least one item)
@@ -439,6 +441,9 @@ function renderList(title, sub, predicate, opts={}){
     const extras = [];
     DATA.forEach(a => {
       (a.acessorios||[]).forEach(ac => {
+        // Acessórios vinculados a uma etiqueta real (ac.id) já aparecem sozinhos via baseSet acima,
+        // com o status real dela — só sintetizamos uma linha "virtual" para acessórios antigos sem etiqueta própria.
+        if (ac.id) return;
         // an accessory is also "in this view" if its status matches
         const acStatus = (ac.status||a.status||'').toUpperCase();
         if (predicate({status: acStatus})) {
@@ -469,8 +474,16 @@ function renderList(title, sub, predicate, opts={}){
   fResp.appendChild(el('<option value="">Todos os responsáveis</option>'));
   uniq(baseSet.map(a=>a.responsavel)).forEach(d => fResp.appendChild(el(`<option>${escapeHtml(d)}</option>`)));
 
+  // Restore last-used search/filters for this view (e.g. after saving an asset) instead of resetting them
+  const savedF = vf(view);
+  fSearch.value = savedF.q || '';
+  if (savedF.dept) fDept.value = savedF.dept;
+  if (savedF.item) fItem.value = savedF.item;
+  if (savedF.resp) fResp.value = savedF.resp;
+
   function applyFilters(){
     const q = (fSearch.value||'').toLowerCase().trim();
+    Object.assign(savedF, { q: fSearch.value||'', dept: fDept.value||'', item: fItem.value||'', resp: fResp.value||'' });
     const list = baseSet.filter(a => {
       if (fDept.value && (a.departamento||'') !== fDept.value) return false;
       if (fItem.value && (a.item||'') !== fItem.value) return false;
@@ -548,8 +561,16 @@ function renderEtiquetas(){
   fDept.appendChild(el('<option value="">Todos os departamentos</option>'));
   uniq(all.map(a=>a.departamento)).forEach(d => fDept.appendChild(el(`<option>${escapeHtml(d)}</option>`)));
 
+  const savedF = vf('etiquetas');
+  fSearch.value = savedF.q || '';
+  if (savedF.tipo) fTipo.value = savedF.tipo;
+  if (savedF.status) fStatus.value = savedF.status;
+  if (savedF.resp) fResp.value = savedF.resp;
+  if (savedF.dept) fDept.value = savedF.dept;
+
   function applyF(){
     const q = (fSearch.value||'').toLowerCase().trim();
+    Object.assign(savedF, { q: fSearch.value||'', tipo: fTipo.value||'', status: fStatus.value||'', resp: fResp.value||'', dept: fDept.value||'' });
     const list = all.filter(a => {
       if (fTipo.value && a.tipo !== fTipo.value) return false;
       if (fStatus.value && a.status !== fStatus.value) return false;
@@ -582,10 +603,13 @@ function renderEtiquetas(){
 }
 
 function renderApple(){
-  const apples = DATA.filter(a => (a.marca||'').toUpperCase()==='APPLE' && (a.status||'').toUpperCase()!=='BAIXA');
-  const baixados = DATA.filter(a => (a.marca||'').toUpperCase()==='APPLE' && (a.status||'').toUpperCase()==='BAIXA');
+  const apples = DATA.filter(a => (a.marca||'').trim().toUpperCase()==='APPLE' && (a.status||'').toUpperCase()!=='BAIXA');
+  const baixados = DATA.filter(a => (a.marca||'').trim().toUpperCase()==='APPLE' && (a.status||'').toUpperCase()==='BAIXA');
   function specsFrom(a){
-    // Extract processor/RAM/Storage from modelo + observacoes when possible
+    // Prefer the manually-filled Processador/RAM/Storage fields; fall back to guessing from modelo + observacoes
+    if (a.processador || a.ram || a.storage) {
+      return { proc: a.processador||'', ram: a.ram||'', stor: a.storage||'' };
+    }
     const txt = ((a.modelo||'') + ' ' + (a.observacoes||'')).toUpperCase();
     const proc = (txt.match(/(M[1-4](?:\s*(?:PRO|MAX|ULTRA))?(?:\s*\d+\s*CORE)?)/) || [])[1] || (txt.match(/(INTEL[^,\n]*?(?:CORE\s+I\d|XEON)[^,\n]*?)(?:\s|$)/)||[])[1] || '';
     const ram  = (txt.match(/(\d{1,3}\s*GB?\s*RAM)|(\d{1,3}G\s*RAM)/) || [])[0] || (txt.match(/\b(\d{1,3})\s*GB\s*RAM\b/i)||[])[0] || '';
@@ -616,8 +640,13 @@ function renderApple(){
   fDept.appendChild(el('<option value="">Todos os setores</option>'));
   uniq(apples.map(a=>a.departamento)).forEach(d => fDept.appendChild(el(`<option>${escapeHtml(d)}</option>`)));
 
+  const savedF = vf('apple');
+  fSearch.value = savedF.q || '';
+  if (savedF.dept) fDept.value = savedF.dept;
+
   function applyA(){
     const q = (fSearch.value||'').toLowerCase().trim();
+    Object.assign(savedF, { q: fSearch.value||'', dept: fDept.value||'' });
     const list = apples.filter(a => {
       if (fDept.value && a.departamento !== fDept.value) return false;
       if (q) {
@@ -693,8 +722,13 @@ function renderQA(){
   fTeam.appendChild(el('<option value="">Todos os times</option>'));
   uniq(people.map(([,c])=>c.team)).forEach(d => fTeam.appendChild(el(`<option>${escapeHtml(d)}</option>`)));
 
+  const savedF = vf('qa');
+  fSearch.value = savedF.q || '';
+  if (savedF.team) fTeam.value = savedF.team;
+
   function applyQ(){
     const q = (fSearch.value||'').toLowerCase().trim();
+    Object.assign(savedF, { q: fSearch.value||'', team: fTeam.value||'' });
     qg.replaceChildren();
     people.forEach(([name, card]) => {
       if (fTeam.value && card.team !== fTeam.value) return;
@@ -817,6 +851,9 @@ function renderModalBody(){
       ${selectFld('Marca','marca', buildOptions('marca'))}
       ${selectFld('Tipo de item','item', buildOptions('item'))}
       ${textFld('Modelo','modelo')}
+      ${textFld('Processador','processador')}
+      ${textFld('RAM','ram')}
+      ${textFld('Storage','storage')}
       ${textFld('Nº série','serie')}
       ${selectFld('Status','status', ['EM USO','ESTOQUE','BAIXA'])}
       ${selectFld('Responsável','responsavel', buildOptions('responsavel'))}
@@ -948,13 +985,36 @@ function renderAccArea(){
   const a = document.getElementById('accArea');
   a.replaceChildren();
   (editing.acessorios||[]).forEach((ac, i) => {
-    const chip = el(`<div class="acc-chip"><div class="left">🔌 <strong>${escapeHtml(ac.item||'ACESSÓRIO')}</strong> — ${escapeHtml(ac.modelo||'')}<span style="margin-left:8px;font-family:var(--mono);color:var(--accent-dark);font-size:12px">#${escapeHtml(ac.etiqueta||'')}</span> <span class="tag tag-gray" style="margin-left:8px">${escapeHtml(ac.estado||'')}</span></div><button class="x" type="button">&times;</button></div>`);
-    chip.querySelector('.x').addEventListener('click', () => { editing.acessorios.splice(i,1); renderAccArea(); });
+    // Acessórios vinculados a uma etiqueta real (ac.id) sempre mostram os dados mais atuais dessa etiqueta
+    const live = ac.id ? DATA.find(d => d.id === ac.id) : null;
+    const item = (live? live.item : ac.item) || 'ACESSÓRIO';
+    const modelo = (live? live.modelo : ac.modelo) || '';
+    const etiqueta = (live? live.etiqueta : ac.etiqueta) || '';
+    const estado = (live? live.estado : ac.estado) || '';
+    const chip = el(`<div class="acc-chip"><div class="left">🔌 <strong>${escapeHtml(item)}</strong> — ${escapeHtml(modelo)}<span style="margin-left:8px;font-family:var(--mono);color:var(--accent-dark);font-size:12px">#${escapeHtml(etiqueta)}</span> <span class="tag tag-gray" style="margin-left:8px">${escapeHtml(estado)}</span></div><button class="x" type="button">&times;</button></div>`);
+    chip.querySelector('.x').addEventListener('click', () => removeAccessory(i));
     a.appendChild(chip);
   });
 }
 
-function accLinkFromStock(){
+// Remove um acessório vinculado: se ele corresponde a uma etiqueta real (ac.id), devolve essa
+// etiqueta para o Estoque (status ESTOQUE) para que volte a aparecer em Etiquetas/Estoque e
+// possa ser buscada de novo em "+ Vincular da etiqueta" para outro equipamento.
+async function removeAccessory(i){
+  const ac = (editing.acessorios||[])[i];
+  if (!ac) return;
+  if (ac.id) {
+    try {
+      await saveAsset({ id: ac.id, status: 'ESTOQUE' });
+      await loadAll();
+    } catch(e){ toast('Erro ao devolver ao estoque: ' + (e.message||e)); return; }
+  }
+  editing.acessorios.splice(i,1);
+  renderAccArea();
+  renderCounts(); render();
+}
+
+async function accLinkFromStock(){
   // Pull from the Etiquetas list (all DATA items with an etiqueta), excluding the current asset and items already linked elsewhere
   const used = new Set();
   DATA.forEach(a => (a.acessorios||[]).forEach(ac => used.add(String(ac.etiqueta||''))));
@@ -971,19 +1031,38 @@ function accLinkFromStock(){
   const tag = sel.replace(/^#?\s*/, '').trim();
   const found = free.find(a => String(a.etiqueta) === tag);
   if (!found) { toast('Etiqueta não encontrada'); return; }
+  try {
+    // A etiqueta vinculada passa a constar como EM USO (fica visível em Em Uso, some do Estoque livre)
+    await saveAsset({ id: found.id, status: 'EM USO', responsavel: editing.responsavel || found.responsavel, departamento: editing.departamento || found.departamento });
+    await loadAll();
+  } catch(e){ toast('Erro ao vincular: ' + (e.message||e)); return; }
   editing.acessorios = editing.acessorios||[];
-  editing.acessorios.push({ etiqueta: found.etiqueta, item: found.item, marca: found.marca, modelo: found.modelo, serie: found.serie, estado: found.estado||'BOM', status:'EM USO', _linkedId: found.id });
+  editing.acessorios.push({ id: found.id, etiqueta: found.etiqueta, item: found.item, marca: found.marca, modelo: found.modelo, serie: found.serie, estado: found.estado||'BOM' });
   renderAccArea();
+  renderCounts(); render();
 }
 
-function accCreateNew(){
+async function accCreateNew(){
   const item = prompt('Tipo do acessório (ex: CARREGADOR, WEBCAM):');
   if (!item) return;
   const modelo = prompt('Modelo (opcional):') || '';
   const etiqueta = prompt('Etiqueta (opcional):') || '';
+  // Cria já como uma etiqueta/ativo de verdade, para que apareça em Etiquetas/Estoque
+  // e possa futuramente ser desvinculado e reaproveitado em outro equipamento.
+  const newRow = {
+    etiqueta, item: item.toUpperCase(), modelo, estado: 'BOM', status: 'EM USO',
+    marca: editing.marca || '', departamento: editing.departamento || '', responsavel: editing.responsavel || '',
+    acessorios: [], historico: [], imagens: []
+  };
+  let id;
+  try {
+    id = await saveAsset(newRow);
+    await loadAll();
+  } catch(e){ toast('Erro ao criar acessório: ' + (e.message||e)); return; }
   editing.acessorios = editing.acessorios||[];
-  editing.acessorios.push({ etiqueta, item: item.toUpperCase(), modelo, estado:'BOM', status:'EM USO' });
+  editing.acessorios.push({ id, etiqueta, item: newRow.item, marca: newRow.marca, modelo, estado: 'BOM' });
   renderAccArea();
+  renderCounts(); render();
 }
 
 function renderHistArea(){
